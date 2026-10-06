@@ -8,7 +8,7 @@
 #align(center)[
   #text(size: 17pt, weight: "bold")[Homework 1] \
   Mengli Yu · Oct. 2026 \
-  *Code:* #link("https://github.com/Liamyu0301/nanogpt-hw1")[github.com/Liamyu0301/nanogpt-hw1]
+  *Code:* #link("https://github.com/Liamyu0301/Gengerative-AI")[github.com/Liamyu0301/Gengerative-AI]
 ]
 
 = Q1. Recap on Convolution
