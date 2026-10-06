@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+out-*/
+data/**/*.bin
+data/**/*.pkl
+hw1/report_draft.pdf
