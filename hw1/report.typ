@@ -128,7 +128,7 @@ GEC is a *sequence-to-sequence* task: messy sentence in, clean sentence out. Mos
   [RoPE], [10.65M], [1.4674 (1750)], [1.4668 (1500)], [1.738 / 1.762],
   [GQA], [9.86M], [1.4696 (2000)], [1.4716 (2000)], [1.689 / 1.717],
 )
-*How to read this:* every model overfits hard. Val loss bottoms out around iter 1750 and then climbs while train loss keeps dropping (1M characters vs. 10M params). nanoGPT only saves a checkpoint when val improves, so *best val* is the number that matters. Val at 5000 mostly measures overfitting. Each setting is one seed, so I treat gaps under about 0.005 as a tie. Going from lr 1e-3 to 2e-3 never changes the ranking.
+*How to read this:* every model overfits hard. Val loss bottoms out around iter 1750 and then climbs while train loss keeps dropping (1M characters vs. 10M params). nanoGPT only saves a checkpoint when val improves, so *best val* is the number that matters. Val at 5000 mostly measures overfitting. Each setting is one seed, so I treat gaps under about 0.005 as a tie. That's a rough guess, not a measured noise level. Going from lr 1e-3 to 2e-3 never changes the ranking.
 
 == 4.1 Baseline
 #figure(image("../plots/q4_1_baseline.png", width: 62%))
@@ -139,7 +139,7 @@ Best val *1.4654* at iter 1750, which matches the 1.4697 the nanoGPT README repo
 
 *Change:* swapped every LayerNorm for RMSNorm: $"RMSNorm"(x) = x \/ sqrt("mean"(x^2) + epsilon) dot g$. No mean subtraction, no bias. Parameter count is unchanged (the baseline LN already has no bias).
 #figure(image("../plots/q4_2_rmsnorm.png", width: 92%))
-*Result: a tie* (1.4649 vs 1.4654, and 1.4731 vs 1.4627 at lr 2e-3). The curves basically sit on top of each other. Makes sense: in a pre-LN model, the mean-centering in LayerNorm isn't doing much, and RMSNorm just drops it. RMSNorm is a bit cheaper with no loss in quality, which is why LLaMA-style models use it.
+*Result: a tie at lr 1e-3* (1.4649 vs 1.4654), and the curves basically sit on top of each other. At lr 2e-3 RMSNorm trails by 0.01 (1.4731 vs 1.4627). That's still small for a single seed, but it's not a clean tie. Makes sense: in a pre-LN model, the mean-centering in LayerNorm isn't doing much, and RMSNorm just drops it. RMSNorm is a bit cheaper with no loss in quality, which is why LLaMA-style models use it.
 
 == 4.3 MLP
 *Which activation?* *GELU*: `Linear(d, 4d) -> GELU -> Linear(4d, d)`, about $8d^2$ params.
@@ -161,4 +161,4 @@ Best val *1.4654* at iter 1750, which matches the 1.4697 the nanoGPT README repo
 == 4.5 GQA
 *Change:* 6 query heads, 3 key/value heads (`n_kv_head = 3`). Query heads $2g$ and $2g+1$ share KV head $g$ (`repeat_interleave` before attention). The KV projection shrinks from $2d^2$ to $d^2$ per layer, so the model has *0.88M fewer params* (9.86M vs 10.75M). That's expected; GQA's point is a smaller KV cache at inference.
 #figure(image("../plots/q4_5_gqa.png", width: 92%))
-*Result: a tie* (1.4696 vs 1.4654; 1.4716 vs 1.4627 at 2e-3), using 8% fewer parameters. GQA also overfits a little less (val at 5000 is 1.689 vs 1.714). Sharing K/V across query-head pairs costs basically nothing in quality here, and it halves the KV cache, which is the whole point for inference.
+*Result: a tie at lr 1e-3* (1.4696 vs 1.4654) with 8% fewer parameters. At lr 2e-3 it trails by about 0.009 (1.4716 vs 1.4627), which is small but not nothing. GQA also overfits a little less (val at 5000 is 1.689 vs 1.714). Sharing K/V across query-head pairs costs basically nothing in quality here, and it halves the KV cache, which is the whole point for inference.

@@ -18,7 +18,7 @@ Seed (1337) and iteration count (5000) are the same for every run.
 
 ## Reproduce
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu124   # CUDA build (Windows/Linux + NVIDIA)
+pip install torch --index-url https://download.pytorch.org/whl/cu128   # CUDA build (what I used: torch 2.11.0+cu128) (Windows/Linux + NVIDIA)
 pip install numpy tiktoken matplotlib typst
 python data/shakespeare_char/prepare.py
 python run_all.py --device=cuda          # all 12 runs, logs -> logs/<run>.log
@@ -30,4 +30,4 @@ python hw1/q2_rope_plot.py               # Q2 plot
 - `logs/`: raw training logs (train/val loss every 250 iters)
 - `plots/`: loss curves for every question, plus the Q2 RoPE plot
 - `results/summary.md`: final/best val loss per run
-- `hw1/report.typ`: source of the written solutions PDF
+- `hw1/report.pdf`: the written solutions (compiled from `hw1/report.typ`)
