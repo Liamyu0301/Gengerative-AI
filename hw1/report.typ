@@ -7,7 +7,7 @@
 
 #align(center)[
   #text(size: 17pt, weight: "bold")[Homework 1] \
-  Mengli Yu · Sep. 2026 \
+  Mengli Yu · Oct. 2026 \
   *Code:* #link("https://github.com/Liamyu0301/nanogpt-hw1")[github.com/Liamyu0301/nanogpt-hw1]
 ]
 
@@ -56,10 +56,10 @@ The sine terms cancel. With $a = b = 1\/sqrt(128)$, each pair contributes $(2\/1
 
 $ #box(stroke: 0.5pt, inset: 6pt)[$A_(i,j) = 1/64 sum_(m=0)^63 cos(|i-j| dot 10000^(-m\/64))$] $
 
-Cosine is even, so only $|i-j|$ matters. $A = 1$ at distance 0. (If you include the usual $1\/sqrt(d)$ scaling, it's just a constant factor.)
+Here $A_(i,j)$ is the pre-softmax score $q_i^T k_j$ after rotation. Cosine is even, so only $|i-j|$ matters. $A = 1$ at distance 0. (If you include the usual $1\/sqrt(d)$ scaling, it's just a constant factor.)
 
 == 2.2 Plot
-#figure(image("../plots/q2_rope_decay.png", width: 100%))
+#figure(image("../plots/q2_rope_decay.png", width: 88%))
 Code: `hw1/q2_rope_plot.py`. Left is the zoom-in, right is the full range on a log x-axis.
 
 == 2.3 What it tells us, and fixes
@@ -68,13 +68,11 @@ Code: `hw1/q2_rope_plot.py`. Left is the zoom-in, right is the full range on a l
 *Limitations this suggests:*
 - *Long-range decay:* far-away tokens get a weaker baseline score, so the model is biased against attending to them.
 - *Poor length extrapolation:* the low-frequency pairs rotate so slowly that, during training on a short context, they never see large angles. At test time on longer inputs they hit angles they've never seen, and quality falls off a cliff past the training length.
-- The oscillation means "far" can look randomly closer or farther, so long-range position is noisy.
 
 *Ways to mitigate:*
 - *Position Interpolation:* squeeze positions by $L_"train" \/ L_"test"$ so the angles stay in the trained range, plus a short fine-tune.
 - *NTK-aware scaling / YaRN:* raise the base (e.g. $10^4 arrow 5 times 10^5$ in Llama 3), or scale the low and high frequencies differently. YaRN also adds an attention temperature.
-- Use a different bias, e.g. *ALiBi* (linear distance penalty), which extrapolates more gracefully.
-- Just *train or fine-tune on longer sequences*, often progressively. Sliding-window or chunked attention also helps for very long inputs.
+- *ALiBi* (linear distance penalty) instead of RoPE, or just *train / fine-tune on longer sequences*.
 
 #pagebreak()
 = Q3. Grammar Error Correction Model
@@ -99,10 +97,9 @@ GEC is a *sequence-to-sequence* task: messy sentence in, clean sentence out. Mos
 - *Embedding:* token embedding (dim 512 to 1024) plus positions (relative bias, as in T5, or RoPE). Shared between encoder, decoder, and the output layer.
 - *Encoder block (x 6 to 12):* bidirectional multi-head self-attention, then an FFN (GELU or SwiGLU, 4x width). Each has a residual connection and pre-LayerNorm/RMSNorm. It reads the whole erroneous sentence in both directions, which matters for errors that depend on later words.
 - *Decoder block (x 6 to 12):* causal (masked) self-attention over what's been generated so far, then *cross-attention* to the encoder outputs (this is how it "looks at" the source to copy or fix it), then an FFN. Same residual and norm setup.
-- *Output head:* linear layer to the vocab plus softmax, giving the next-token distribution.
-- *Decoding:* beam search (beam 5). A small "keep the source" bias helps avoid over-correcting.
+- *Output head + decoding:* linear + softmax over the vocab; beam search (beam 5) at inference.
 
-(Alternatives: a decoder-only LLM fine-tuned on "fix: ... => ..." prompts, or a tagging model like GECToR that predicts edits per token, which is faster. Seq2seq is the cleanest baseline.)
+(Alternatives: a fine-tuned decoder-only LLM, or an edit-tagging model like GECToR.)
 
 == Input / output and training
 - *Input:* the possibly ungrammatical sentence (token IDs). *Output:* the corrected sentence, generated token by token.
@@ -114,7 +111,6 @@ GEC is a *sequence-to-sequence* task: messy sentence in, clean sentence out. Mos
   [*Learning rate*], [Fine-tuning a pretrained model: 3e-5 to 1e-4, \~1K warmup steps, then linear/cosine decay. From scratch: \~5e-4 with inverse-sqrt schedule.],
   [*Batch*], [\~4K to 8K tokens/GPU (dynamic batching by length), mixed precision bf16],
   [*Iterations*], [Synthetic stage \~100K to 200K steps; real-data fine-tune \~10K to 30K steps; pick the checkpoint by dev F#sub[0.5]],
-  [*Regularization*], [dropout 0.1, label smoothing 0.1, early stopping on dev],
   [*Eval*], [F#sub[0.5] with ERRANT / M2 scorer (precision weighted higher, since a wrong "fix" is worse than a missed one)],
 )
 
