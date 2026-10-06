@@ -117,24 +117,36 @@ GEC is a *sequence-to-sequence* task: messy sentence in, clean sentence out. Mos
 #pagebreak()
 = Q4. Mini-LLM (nanoGPT, char-level Shakespeare)
 
-*Setup for every run:* default `config/train_shakespeare_char.py` (6 layers, 6 heads, $d = 384$, context 256, batch 64, dropout 0.2, AdamW, lr 1e-3 with cosine decay to 1e-4, 5000 iters). *Seed 1337 and 5000 iterations are fixed for all runs.* Each variant changes exactly one thing. Every variant is a flag in `model.py` (`norm_type`, `mlp_type`, `pos_enc`, `n_kv_head`), with one config per run in `config/hw1_*.py`. I also tried lr = 2e-3 (min_lr 2e-4) for every variant, and report both numbers below.
+*Setup for every run:* default `config/train_shakespeare_char.py` (6 layers, 6 heads, $d = 384$, context 256, batch 64, dropout 0.2, AdamW, lr 1e-3 with cosine decay to 1e-4, 5000 iters). *Seed 1337 and 5000 iterations are fixed for all runs.* Each variant changes exactly one thing. Every variant is a flag in `model.py` (`norm_type`, `mlp_type`, `pos_enc`, `n_kv_head`), with one config per run in `config/hw1_*.py`. I also tuned the LR: every run was repeated at lr = 2e-3 (min_lr 2e-4), and both numbers are reported. All 12 runs were on one RTX 3080 Ti (PyTorch 2.11, CUDA, bf16 autocast, no torch.compile). Logs are in `logs/`, and plots for both LRs are in `plots/`.
 
-// RESULTS_TABLE
+#table(columns: (auto, auto, auto, auto, auto), stroke: 0.4pt, inset: 4pt, align: center,
+  [*run*], [*params*], [*best val, lr 1e-3* (iter)], [*best val, lr 2e-3* (iter)], [*val @ 5000, 1e-3 / 2e-3*],
+  [baseline], [10.75M], [1.4654 (1750)], [1.4627 (1750)], [1.714 / 1.713],
+  [RMSNorm], [10.75M], [1.4649 (1750)], [1.4731 (2000)], [1.700 / 1.728],
+  [SwiGLU], [10.75M], [1.4930 (1250)], [1.4958 (1750)], [1.881 / 1.774],
+  [NoPE], [10.65M], [1.5335 (3000)], [1.5275 (3000)], [1.567 / 1.581],
+  [RoPE], [10.65M], [1.4674 (1750)], [1.4668 (1500)], [1.738 / 1.762],
+  [GQA], [9.86M], [1.4696 (2000)], [1.4716 (2000)], [1.689 / 1.717],
+)
+*How to read this:* every model overfits hard. Val loss bottoms out around iter 1750 and then climbs while train loss keeps dropping (1M characters vs. 10M params). nanoGPT only saves a checkpoint when val improves, so *best val* is the number that matters. Val at 5000 mostly measures overfitting. Each setting is one seed, so I treat gaps under about 0.005 as a tie. Going from lr 1e-3 to 2e-3 never changes the ranking.
 
 == 4.1 Baseline
-// Q4_1
+#figure(image("../plots/q4_1_baseline.png", width: 62%))
+Best val *1.4654* at iter 1750, which matches the 1.4697 the nanoGPT README reports. After that it's classic overfitting: train goes to 0.61, val climbs back to 1.71.
 
 == 4.2 LayerNorm
 *Which one?* *Pre-LayerNorm.* In `Block.forward`, the norm is applied *inside* the residual branch, before attention and the MLP: `x = x + attn(ln_1(x))`, `x = x + mlp(ln_2(x))`, plus a final `ln_f`. (Post-LN would be `x = ln(x + attn(x))`.)
 
 *Change:* swapped every LayerNorm for RMSNorm: $"RMSNorm"(x) = x \/ sqrt("mean"(x^2) + epsilon) dot g$. No mean subtraction, no bias. Parameter count is unchanged (the baseline LN already has no bias).
-// Q4_2
+#figure(image("../plots/q4_2_rmsnorm.png", width: 92%))
+*Result: a tie* (1.4649 vs 1.4654, and 1.4731 vs 1.4627 at lr 2e-3). The curves basically sit on top of each other. Makes sense: in a pre-LN model, the mean-centering in LayerNorm isn't doing much, and RMSNorm just drops it. RMSNorm is a bit cheaper with no loss in quality, which is why LLaMA-style models use it.
 
 == 4.3 MLP
 *Which activation?* *GELU*: `Linear(d, 4d) -> GELU -> Linear(4d, d)`, about $8d^2$ params.
 
 *Change:* SwiGLU: $"SwiGLU"(x) = W_"down" ("SiLU"(W_"gate" x) dot.o W_"up" x)$. That's 3 matrices, so to keep params equal I set the hidden size to $h = 8d\/3 = 1024$: $3 dot d dot h = 8d^2$. The parameter count comes out *exactly* the same as baseline (10.745M).
-// Q4_3
+#figure(image("../plots/q4_3_swiglu.png", width: 92%))
+*Result: slightly worse here* (1.4930 vs 1.4654; 1.4958 vs 1.4627 at 2e-3). SwiGLU actually *fits* faster: lower train loss early, and 0.50 vs 0.61 final train loss at lr 1e-3. But it starts overfitting earlier (best at iter 1250) and ends with the worst val. On this tiny, data-limited problem, extra fitting power just turns into memorization. SwiGLU's usual win shows up in the big-data regime, where you're not overfitting.
 
 == 4.4 Positional encoding
 *Which one?* *Learned absolute* position embeddings: `wpe = nn.Embedding(256, 384)`, added to the token embeddings at the input.
@@ -142,8 +154,11 @@ GEC is a *sequence-to-sequence* task: messy sentence in, clean sentence out. Mos
 *Change 1, NoPE:* just delete `wpe`. The causal mask still leaks position info (token $t$ can see exactly $t$ tokens), so the model can still work out order implicitly. 98K fewer params.
 
 *Change 2, RoPE:* delete `wpe`, and rotate $q$ and $k$ inside every attention layer (per head, head dim 64, base 10000, consecutive pairs as in Q2). I checked that $q_i^T k_j$ depends only on $i - j$ (same score at (10, 3), (107, 100), (200, 193)).
-// Q4_4
+#figure(image("../plots/q4_4_posenc.png", width: 92%))
+- *NoPE is clearly worse at its best* (1.5335 vs 1.4654). It learns slower, since it has to infer order from the causal mask alone. It also barely overfits: train only gets to 1.07, and val stays flat around 1.55 to 1.57. So its final-iter val is actually the best of all runs, but that's a side effect of underfitting, not a better model.
+- *RoPE ties the baseline at its best* (1.4674 vs 1.4654) and *learns fastest early*: it's ahead of baseline on val for the first 1000 iters. With a 256-token context, there's no length-extrapolation test here, so RoPE's main advantage (relative positions, which generalize better to unseen lengths) doesn't get to show. It also overfits a bit harder by the end.
 
 == 4.5 GQA
 *Change:* 6 query heads, 3 key/value heads (`n_kv_head = 3`). Query heads $2g$ and $2g+1$ share KV head $g$ (`repeat_interleave` before attention). The KV projection shrinks from $2d^2$ to $d^2$ per layer, so the model has *0.88M fewer params* (9.86M vs 10.75M). That's expected; GQA's point is a smaller KV cache at inference.
-// Q4_5
+#figure(image("../plots/q4_5_gqa.png", width: 92%))
+*Result: a tie* (1.4696 vs 1.4654; 1.4716 vs 1.4627 at 2e-3), using 8% fewer parameters. GQA also overfits a little less (val at 5000 is 1.689 vs 1.714). Sharing K/V across query-head pairs costs basically nothing in quality here, and it halves the KV cache, which is the whole point for inference.
