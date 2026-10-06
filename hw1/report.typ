@@ -59,7 +59,7 @@ $ #box(stroke: 0.5pt, inset: 6pt)[$A_(i,j) = 1/64 sum_(m=0)^63 cos(|i-j| dot 100
 Here $A_(i,j)$ is the pre-softmax score $q_i^T k_j$ after rotation. Cosine is even, so only $|i-j|$ matters. $A = 1$ at distance 0. (If you include the usual $1\/sqrt(d)$ scaling, it's just a constant factor.)
 
 == 2.2 Plot
-#figure(image("../plots/q2_rope_decay.png", width: 88%))
+#figure(image("../plots/q2_rope_decay.png", width: 80%))
 Code: `hw1/q2_rope_plot.py`. Left is the zoom-in, right is the full range on a log x-axis.
 
 == 2.3 What it tells us, and fixes
