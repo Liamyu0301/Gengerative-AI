@@ -24,6 +24,7 @@ python data/shakespeare_char/prepare.py
 python run_all.py --device=cuda          # all 12 runs, logs -> logs/<run>.log
 python hw1/plot_losses.py                # plots -> plots/, table -> results/summary.md
 python hw1/q2_rope_plot.py               # Q2 plot
+python hw1/checks.py                     # numerical checks (Q1.3 gradient, RoPE, GQA)
 ```
 
 ## Where things are

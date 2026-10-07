@@ -40,7 +40,7 @@ Two equivalent ways to see it:
 - *Matrix form:* $(partial L) / (partial X_"col") = w^T g in RR^(9 times 4)$ with $g = "vec"(G)^T$. Then *col2im* scatters each column back to its patch location and *adds up* the overlaps, giving a $4 times 4$ result.
 - *Conv form:* zero-pad $G$ by 2 on every side ($6 times 6$), then convolve with the kernel rotated by $180 degree$. This is a "full" convolution of $G$ with $W$, which gives back a $4 times 4$ map.
 
-Sanity check: the corner $X[0,0]$ is covered by one window only, so its gradient is $G[0,0] W[0,0]$. A middle pixel like $X[1,1]$ is covered by all 4 windows and gets 4 terms.
+Sanity check: the corner $X[0,0]$ is covered by one window only, so its gradient is $G[0,0] W[0,0]$. A middle pixel like $X[1,1]$ is covered by all 4 windows and gets 4 terms. I also checked both forms against PyTorch autograd on random inputs, and they match exactly (`hw1/checks.py`).
 
 #pagebreak()
 = Q2. Context Window of RoPE
@@ -153,12 +153,12 @@ Best val *1.4654* at iter 1750, which matches the 1.4697 the nanoGPT README repo
 
 *Change 1, NoPE:* just delete `wpe`. The causal mask still leaks position info (token $t$ can see exactly $t$ tokens), so the model can still work out order implicitly. 98K fewer params.
 
-*Change 2, RoPE:* delete `wpe`, and rotate $q$ and $k$ inside every attention layer (per head, head dim 64, base 10000, consecutive pairs as in Q2). I checked that $q_i^T k_j$ depends only on $i - j$ (same score at (10, 3), (107, 100), (200, 193)).
+*Change 2, RoPE:* delete `wpe`, and rotate $q$ and $k$ inside every attention layer (per head, head dim 64, base 10000, consecutive pairs as in Q2). I checked that $q_i^T k_j$ depends only on $i - j$ (same score at (10, 3), (107, 100), (200, 193); see `hw1/checks.py`).
 #figure(image("../plots/q4_4_posenc.png", width: 92%))
 - *NoPE is clearly worse at its best* (1.5335 vs 1.4654). It learns slower, since it has to infer order from the causal mask alone. It also barely overfits: train only gets to 1.07, and val stays flat around 1.55 to 1.57. So its final-iter val is actually the best of all runs, but that's a side effect of underfitting, not a better model.
 - *RoPE ties the baseline at its best* (1.4674 vs 1.4654) and *learns fastest early*: it's ahead of baseline on val for the first 1000 iters. With a 256-token context, there's no length-extrapolation test here, so RoPE's main advantage (relative positions, which generalize better to unseen lengths) doesn't get to show. It also overfits a bit harder by the end.
 
 == 4.5 GQA
-*Change:* 6 query heads, 3 key/value heads (`n_kv_head = 3`). Query heads $2g$ and $2g+1$ share KV head $g$ (`repeat_interleave` before attention). The KV projection shrinks from $2d^2$ to $d^2$ per layer, so the model has *0.88M fewer params* (9.86M vs 10.75M). That's expected; GQA's point is a smaller KV cache at inference.
+*Change:* 6 query heads, 3 key/value heads (`n_kv_head = 3`). Query heads $2g$ and $2g+1$ share KV head $g$ (`repeat_interleave` before attention). The KV projection shrinks from $2d^2$ to $d^2$ per layer, so the model has *0.88M fewer params* (9.86M vs 10.75M). As a correctness check, the GQA layer gives exactly the same output as an MHA layer whose K/V weights are each KV head copied twice (`hw1/checks.py`). That's expected; GQA's point is a smaller KV cache at inference.
 #figure(image("../plots/q4_5_gqa.png", width: 92%))
 *Result: a tie at lr 1e-3* (1.4696 vs 1.4654) with 8% fewer parameters. At lr 2e-3 it trails by about 0.009 (1.4716 vs 1.4627), which is small but not nothing. GQA also overfits a little less (val at 5000 is 1.689 vs 1.714). Sharing K/V across query-head pairs costs basically nothing in quality here, and it halves the KV cache, which is the whole point for inference.
