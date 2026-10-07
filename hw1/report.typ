@@ -18,6 +18,7 @@ We use the deep-learning convention (cross-correlation): $Y[a,b] = sum_(u,v=0)^2
 == 1.1 Output size
 $(4 - 3)/1 + 1 = 2$, so the output is *$2 times 2$*.
 
+#pagebreak(weak: true)
 == 1.2 im2col
 im2col cuts out every $3 times 3$ patch the filter visits and flattens it into one column. There are 4 patches, so we get a $9 times 4$ matrix:
 
@@ -31,6 +32,7 @@ With $C_"in"$ input channels and $C_"out"$ filters, this becomes $(C_"out" times
 
 *Why it's nice on GPU:* the conv turns into a big dense GEMM (General Matrix Multiply). GEMM is the most heavily tuned op on GPUs (cuBLAS, tensor cores). It has regular, contiguous memory access and tons of independent multiply-adds to run in parallel, so it beats a hand-written sliding-window loop. The cost is extra memory, since overlapping pixels get copied into several columns.
 
+#pagebreak(weak: true)
 == 1.3 Gradient w.r.t. the input
 Each input pixel $X[p,q]$ touches every output $Y[a,b]$ whose window covers it, with weight $W[p-a, q-b]$. Chain rule:
 
@@ -58,10 +60,12 @@ $ #box(stroke: 0.5pt, inset: 6pt)[$A_(i,j) = 1/64 sum_(m=0)^63 cos(|i-j| dot 100
 
 Here $A_(i,j)$ is the pre-softmax score $q_i^T k_j$ after rotation. Cosine is even, so only $|i-j|$ matters. $A = 1$ at distance 0. (If you include the usual $1\/sqrt(d)$ scaling, it's just a constant factor.)
 
+#pagebreak(weak: true)
 == 2.2 Plot
 #figure(image("../plots/q2_rope_decay.png", width: 80%))
 Code: `hw1/q2_rope_plot.py`. Left is the zoom-in, right is the full range on a log x-axis.
 
+#pagebreak(weak: true)
 == 2.3 What it tells us, and fixes
 *What we see:* the score is highest nearby and decays as tokens get farther apart. That's RoPE's built-in "recency prior." It also wiggles a lot, and past about 1.7K tokens it starts swinging around 0 (even negative) with no clear trend. Out there, distance basically stops carrying a clean signal.
 
@@ -101,6 +105,7 @@ GEC is a *sequence-to-sequence* task: messy sentence in, clean sentence out. Mos
 
 (Alternatives: a fine-tuned decoder-only LLM, or an edit-tagging model like GECToR.)
 
+#pagebreak(weak: true)
 == Input / output and training
 - *Input:* the possibly ungrammatical sentence (token IDs). *Output:* the corrected sentence, generated token by token.
 - *Data:* public GEC corpora (Lang-8, NUCLE, FCE, W&I+LOCNESS from BEA-2019). Since real data is limited, pretrain first on *synthetic* pairs made by injecting errors into clean text (drop/swap articles, wrong verb tense, typos, etc.). Then fine-tune on real data, and finish on the cleanest set (W&I).
@@ -134,6 +139,7 @@ GEC is a *sequence-to-sequence* task: messy sentence in, clean sentence out. Mos
 #figure(image("../plots/q4_1_baseline.png", width: 62%))
 Best val *1.4654* at iter 1750, which matches the 1.4697 the nanoGPT README reports. After that it's classic overfitting: train goes to 0.61, val climbs back to 1.71.
 
+#pagebreak(weak: true)
 == 4.2 LayerNorm
 *Which one?* *Pre-LayerNorm.* In `Block.forward`, the norm is applied *inside* the residual branch, before attention and the MLP: `x = x + attn(ln_1(x))`, `x = x + mlp(ln_2(x))`, plus a final `ln_f`. (Post-LN would be `x = ln(x + attn(x))`.)
 
@@ -141,6 +147,7 @@ Best val *1.4654* at iter 1750, which matches the 1.4697 the nanoGPT README repo
 #figure(image("../plots/q4_2_rmsnorm.png", width: 92%))
 *Result: a tie at lr 1e-3* (1.4649 vs 1.4654), and the curves basically sit on top of each other. At lr 2e-3 RMSNorm trails by 0.01 (1.4731 vs 1.4627). That's still small for a single seed, but it's not a clean tie. Makes sense: in a pre-LN model, the mean-centering in LayerNorm isn't doing much, and RMSNorm just drops it. RMSNorm is a bit cheaper with no loss in quality, which is why LLaMA-style models use it.
 
+#pagebreak(weak: true)
 == 4.3 MLP
 *Which activation?* *GELU*: `Linear(d, 4d) -> GELU -> Linear(4d, d)`, about $8d^2$ params.
 
@@ -148,6 +155,7 @@ Best val *1.4654* at iter 1750, which matches the 1.4697 the nanoGPT README repo
 #figure(image("../plots/q4_3_swiglu.png", width: 92%))
 *Result: slightly worse here* (1.4930 vs 1.4654; 1.4958 vs 1.4627 at 2e-3). SwiGLU actually *fits* faster: lower train loss early, and 0.50 vs 0.61 final train loss at lr 1e-3. But it starts overfitting earlier (best at iter 1250) and ends with the worst val. On this tiny, data-limited problem, extra fitting power just turns into memorization. SwiGLU's usual win shows up in the big-data regime, where you're not overfitting.
 
+#pagebreak(weak: true)
 == 4.4 Positional encoding
 *Which one?* *Learned absolute* position embeddings: `wpe = nn.Embedding(256, 384)`, added to the token embeddings at the input.
 
@@ -158,6 +166,7 @@ Best val *1.4654* at iter 1750, which matches the 1.4697 the nanoGPT README repo
 - *NoPE is clearly worse at its best* (1.5335 vs 1.4654). It learns slower, since it has to infer order from the causal mask alone. It also barely overfits: train only gets to 1.07, and val stays flat around 1.55 to 1.57. So its final-iter val is actually the best of all runs, but that's a side effect of underfitting, not a better model.
 - *RoPE ties the baseline at its best* (1.4674 vs 1.4654) and *learns fastest early*: it's ahead of baseline on val for the first 1000 iters. With a 256-token context, there's no length-extrapolation test here, so RoPE's main advantage (relative positions, which generalize better to unseen lengths) doesn't get to show. It also overfits a bit harder by the end.
 
+#pagebreak(weak: true)
 == 4.5 GQA
 *Change:* 6 query heads, 3 key/value heads (`n_kv_head = 3`). Query heads $2g$ and $2g+1$ share KV head $g$ (`repeat_interleave` before attention). The KV projection shrinks from $2d^2$ to $d^2$ per layer, so the model has *0.88M fewer params* (9.86M vs 10.75M). As a correctness check, the GQA layer gives exactly the same output as an MHA layer whose K/V weights are each KV head copied twice (`hw1/checks.py`). That's expected; GQA's point is a smaller KV cache at inference.
 #figure(image("../plots/q4_5_gqa.png", width: 92%))
